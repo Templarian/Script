@@ -6,6 +6,8 @@ A simple scripting engine for C#.
 
 Please view the wiki for a comprehensive overview of what is possible.
 
+### Getting Started
+
 * [Script Documentation](https://github.com/Templarian/Script/wiki/Script-Documentation)
 
 ### Library Reference
