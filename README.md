@@ -6,15 +6,15 @@ A simple scripting engine for C#.
 
 Please view the wiki for a comprehensive overview of what is possible.
 
-* [[Script Documentation]]
+* [Script Documentation](https://github.com/Templarian/Script/wiki/Script-Documentation)
 
 ### Library Reference
 
-* [[ScriptEngine]]
- * [[AddAction]]
- * [[AddFunction]]
- * [[AddCondition]]
- * [[AddClass]]
- * [[Exception]]
- * [[Execute]]
- * [[Evaluate]]
+* [ScriptEngine](https://github.com/Templarian/Script/wiki/ScriptEngine)
+ * [AddAction](https://github.com/Templarian/Script/wiki/AddAction)
+ * [AddFunction](https://github.com/Templarian/Script/wiki/AddFunction)
+ * [AddCondition](https://github.com/Templarian/Script/wiki/AddCondition)
+ * [AddClass](https://github.com/Templarian/Script/wiki/AddClass)
+ * [Exception](https://github.com/Templarian/Script/wiki/Exception)
+ * [Execute](https://github.com/Templarian/Script/wiki/Execute)
+ * [Evaluate](https://github.com/Templarian/Script/wiki/Evaluate)
