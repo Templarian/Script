@@ -4,7 +4,7 @@ A simple scripting engine for C#.
 
 ## Documentation
 
-Please view the wiki for a comprehensive overview of what is possible.
+Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehensive overview of what is possible.
 
 ### Getting Started
 
