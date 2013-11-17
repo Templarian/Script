@@ -20,3 +20,5 @@ Please view the wiki for a comprehensive overview of what is possible.
  * [Exception](https://github.com/Templarian/Script/wiki/Exception)
  * [Execute](https://github.com/Templarian/Script/wiki/Execute)
  * [Evaluate](https://github.com/Templarian/Script/wiki/Evaluate)
+ * [Process](https://github.com/Templarian/Script/wiki/Process)
+ * [Trigger](https://github.com/Templarian/Script/wiki/Trigger)
