@@ -10,6 +10,7 @@ Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehe
 
 * [Script Documentation](https://github.com/Templarian/Script/wiki/Script-Documentation)
 * [Data Types](https://github.com/Templarian/Script/wiki/Types)
+* [Operators](https://github.com/Templarian/Script/wiki/Operators)
 
 ### Library Reference
 
