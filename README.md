@@ -10,6 +10,8 @@ Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehe
 
 * Written from the ground up for readability.
 * Intuitive C# syntax on intepreter and script side.
+* Comprehensive syntax errors and script errors.
+* Scripts allow method overloading based on datatype.
 
 
 ## Hello World
