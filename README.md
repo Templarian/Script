@@ -12,7 +12,7 @@ Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehe
 * Intuitive C# syntax on intepreter and script side.
 * Comprehensive syntax errors and script errors.
 * Scripts allow method overloading based on datatype.
-* Implicit conversions for all types `("foo1" = "foo" + 1)`
+* Implicit conversions for all [types](https://github.com/Templarian/Script/wiki/Types) `("foo1" = "foo" + 1)`
 
 
 ## Hello World
