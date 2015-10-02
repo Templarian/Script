@@ -1,6 +1,6 @@
 # Script
 
-A simple scripting engine for C#.
+A simple portable scripting engine for C#. Think Python syntax with JavaScript objects and strict typing.
 
 ## Documentation
 
@@ -11,8 +11,9 @@ Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehe
 * Written from the ground up for readability.
 * Intuitive C# syntax on intepreter and script side.
 * Comprehensive syntax errors and script errors.
-* Scripts allow method overloading based on datatype.
-* Implicit conversions for all [types](https://github.com/Templarian/Script/wiki/Types) `("foo1" = "foo" + 1)`
+* Strict typing allows method overloading based on datatype.
+* Simple, only `int`, `double`, `string`, `bool`, and `regex` [data types](https://github.com/Templarian/Script/wiki/Types).
+* Implicit conversions for all types `("foo1" = "foo" + 1)`
 
 
 ## Hello World
