@@ -42,6 +42,7 @@
     <Compile Include="ScriptEngine.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ScriptError.cs" />
+    <Compile Include="ScriptExtend.cs" />
     <Compile Include="ScriptFunction.cs" />
     <Compile Include="ScriptProperty.cs" />
     <Compile Include="ScriptScope.cs" />

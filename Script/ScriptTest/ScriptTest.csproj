@@ -56,6 +56,7 @@
     <Compile Include="ConditionElse.cs" />
     <Compile Include="ConditionIfElse.cs" />
     <Compile Include="ArithmeticInteger.cs" />
+    <Compile Include="Extend.cs" />
     <Compile Include="Function.cs" />
     <Compile Include="Trigger.cs" />
     <Compile Include="ExecuteOverload.cs" />

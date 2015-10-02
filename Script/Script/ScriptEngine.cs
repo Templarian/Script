@@ -395,6 +395,33 @@ namespace Script
                 {
                     return value;
                 }
+                else if (lexer.Token == "DOT")
+                {
+                    lexer.Next();
+                    if (lexer.Token == "SYMBOL")
+                    {
+                        var match = Extends.Where(x => x.Name == lexer.TokenContents).FirstOrDefault();
+                        if (match == null)
+                        {
+                            /*Error.DynamicInvoke(new ScriptError
+                            {
+                                Message = String.Format("Property '{0}' contains {1} items (not {2}) on Line {3} Col {4}",
+                                        property.Name,
+                                        list.Count(),
+                                        index + 1,
+                                        lexer.LineNumber,
+                                        lexer.Position),
+                                LineNumber = lexer.LineNumber,
+                                Position = lexer.Position,
+                                MethodName = lexer.TokenContents
+                            });*/
+                        }
+                        else
+                        {
+                            var foo = ""; // return value from match.method
+                        }
+                    }
+                }
                 else if (lexer.Token == "SYMBOL")
                 {
                     var matches = Regex.Matches(lexer.TokenContents, @"^([^\[\]]+?)(\[(\d+)\])?$");
@@ -482,14 +509,14 @@ namespace Script
                     switch (lexer.TokenContents)
                     {
                         case "+":
-                            switch(type)
+                            switch (type)
                             {
                                 case ScriptTypes.String:
 
                                     break;
                                 case ScriptTypes.Integer:
                                     var nextValue = StepValue(lexer, out type);
-                                    switch(type)
+                                    switch (type)
                                     {
                                         case ScriptTypes.String:
                                             type = ScriptTypes.String;
@@ -1005,6 +1032,37 @@ namespace Script
                 }
                 Debug.WriteLine("Token: {0} Contents: {1}", lexer.Token, lexer.TokenContents);
             }
+        }
+
+        private List<ScriptTypeFunction> Extends = new List<ScriptTypeFunction>();
+
+        public void TypeFunction<InputT, ReturnT>(string methodName, Func<InputT, ReturnT> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            Extends.Add(new ScriptTypeFunction(inputT, methodName, method));
+        }
+
+        public void TypeFunction<InputT, T1, ReturnT>(string methodName, Func<InputT, T1, ReturnT> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            var t1 = ScriptType.ToEnum(typeof(T1));
+            ScriptTypes[] args = { t1 };
+            Extends.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+        }
+
+        public void TypeFunction<InputT, T1, T2, ReturnT>(string methodName, Func<InputT, T1, T2, ReturnT> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            var t1 = ScriptType.ToEnum(typeof(T1));
+            var t2 = ScriptType.ToEnum(typeof(T2));
+            ScriptTypes[] args = { t1, t2 };
+            Extends.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+        }
+
+        public void TypeProperty<InputT, ReturnT>(string propertyName, Func<InputT, ReturnT> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            Extends.Add(new ScriptTypeProperty(inputT, propertyName, method));
         }
     }
 }
