@@ -15,7 +15,7 @@ namespace Script
 
         public ScriptEngine()
         {
-            
+
         }
 
         public void Execute(string script)
@@ -74,7 +74,7 @@ namespace Script
             return result; // Makes code look cleaner if it passes through
         }
 
-        private bool DepthValidCondition ()
+        private bool DepthValidCondition()
         {
             if (Depths[Indent]) // if previous block true
             {
@@ -122,7 +122,8 @@ namespace Script
                 new TokenDefinition(@"else if\s?\(", "ELSEIF"),
                 new TokenDefinition(@"else", "ELSE"),
                 new TokenDefinition(@"(\+|-|\*|\/)", "ARITHMETIC"),
-                new TokenDefinition(@"(int|double|string|bool)(\[\]|)", "TYPE"),
+                new TokenDefinition(@"(int|double|string|bool)", "BASETYPE"),
+                new TokenDefinition(@"(int|double|string|bool)\[\]", "LISTTYPE"),
                 new TokenDefinition(@"(name|extends|event|function|condition|string|integer|double|boolean|array|return)", "KEYWORD"),
                 new TokenDefinition(@"[*<>\?\-+/A-Za-z->!][*<>\?\-+/A-Za-z0-9->!]*(\[\d+\]|)", "SYMBOL"),
                 new TokenDefinition(@"\[", "ARRAYLEFT"),
@@ -191,7 +192,7 @@ namespace Script
                     Debug.WriteLine("Tab: {0}", Indent);
                 }
                 else if (lexer.Token == "SYMBOL")
-                { 
+                {
                     // 1. Class
                     var classInstance = classScope.Classes.FirstOrDefault(x => x.Name == lexer.TokenContents);
                     if (classInstance != null)
@@ -245,7 +246,7 @@ namespace Script
                     var type = ScriptTypes.Null;
                     lexer.Prev();
                     return StepValue(lexer, out type);
-                    
+
                     Error.DynamicInvoke(new ScriptError
                     {
                         Message = String.Format("Invalid class or function or property \"{0}\" Line {1} Col {2}",
@@ -257,7 +258,7 @@ namespace Script
                         MethodName = lexer.TokenContents
                     });
                 }
-                else if (lexer.Token == "TYPE")
+                else if (lexer.Token == "LISTTYPE")
                 {
                     switch (lexer.TokenContents)
                     {
@@ -273,30 +274,35 @@ namespace Script
                         case "bool[]":
                             StepProperty<List<bool>>(lexer, classScope);
                             break;
-                        case "string":
-                            StepProperty<string>(lexer, classScope);
-                            break;
-                        case "int":
-                            StepProperty<int>(lexer, classScope);
-                            break;
-                        case "double":
-                            StepProperty<double>(lexer, classScope);
-                            break;
-                        case "bool":
-                            StepProperty<bool>(lexer, classScope);
-                            break;
-                        default:
-                            Error.DynamicInvoke(new ScriptError
-                            {
-                                Message = String.Format("Invalid type \"{0}\" Line {1} Col {2}",
-                                    lexer.TokenContents,
-                                    lexer.LineNumber,
-                                    lexer.Position),
-                                LineNumber = lexer.LineNumber,
-                                Position = lexer.Position,
-                                MethodName = lexer.TokenContents
-                            });
-                            break;
+                    }
+                }
+                else if (lexer.Token == "BASETYPE")
+                {
+                    lexer.Next();
+                    if (lexer.Token == "LEFT")
+                    {
+                        lexer.Prev();
+                        lexer.Prev(); // LEFT
+                        lexer.Prev(); // BASETYPE
+                        return StepValue(lexer);
+                    }
+                    else if (lexer.Token == "SPACE")
+                    {
+                        switch (lexer.TokenContents)
+                        {
+                            case "string":
+                                StepProperty<string>(lexer, classScope);
+                                break;
+                            case "int":
+                                StepProperty<int>(lexer, classScope);
+                                break;
+                            case "double":
+                                StepProperty<double>(lexer, classScope);
+                                break;
+                            case "bool":
+                                StepProperty<bool>(lexer, classScope);
+                                break;
+                        }
                     }
                 }
                 else if (lexer.Token == "IF")
@@ -395,12 +401,29 @@ namespace Script
                 {
                     return value;
                 }
+                else if (lexer.Token == "BASETYPE")
+                {
+                    switch(lexer.TokenContents)
+                    {
+                        case "string":
+                            return Return<string>(StepValue(lexer));
+                        case "int":
+
+                            break;
+                        case "double":
+
+                            break;
+                        case "bool":
+
+                            break;
+                    }
+                }
                 else if (lexer.Token == "DOT")
                 {
                     lexer.Next();
                     if (lexer.Token == "SYMBOL")
                     {
-                        var match = Extends.Where(x => x.Name == lexer.TokenContents).FirstOrDefault();
+                        var match = TypeFunctions.Where(x => x.Name == lexer.TokenContents).FirstOrDefault();
                         if (match == null)
                         {
                             /*Error.DynamicInvoke(new ScriptError
@@ -729,7 +752,18 @@ namespace Script
             // Syntax error thrown here
             return value;
         }
-        
+
+        /// <summary>
+        /// Step value returning object.
+        /// </summary>
+        /// <param name="lexer"></param>
+        /// <returns></returns>
+        private object StepValue(Lexer lexer)
+        {
+            var type = ScriptTypes.Null;
+            return StepValue(lexer, out type);
+        }
+
         private object StepList(Lexer lexer, out ScriptTypes type)
         {
             type = ScriptTypes.Null;
@@ -873,7 +907,8 @@ namespace Script
             {
                 if (args.Select(pair => pair.Key).SequenceEqual(functionInstance.Types))
                 {
-                    return functionInstance.Function.DynamicInvoke(args.Select(pair => {
+                    return functionInstance.Function.DynamicInvoke(args.Select(pair =>
+                    {
                         if (pair.Key == ScriptTypes.ListString)
                         {
                             return this.Return<List<string>>(pair.Value);
@@ -1034,12 +1069,12 @@ namespace Script
             }
         }
 
-        private List<ScriptTypeFunction> Extends = new List<ScriptTypeFunction>();
+        private List<ScriptTypeFunction> TypeFunctions = new List<ScriptTypeFunction>();
 
         public void TypeFunction<InputT, ReturnT>(string methodName, Func<InputT, ReturnT> method)
         {
             var inputT = ScriptType.ToEnum(typeof(InputT));
-            Extends.Add(new ScriptTypeFunction(inputT, methodName, method));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method));
         }
 
         public void TypeFunction<InputT, T1, ReturnT>(string methodName, Func<InputT, T1, ReturnT> method)
@@ -1047,7 +1082,7 @@ namespace Script
             var inputT = ScriptType.ToEnum(typeof(InputT));
             var t1 = ScriptType.ToEnum(typeof(T1));
             ScriptTypes[] args = { t1 };
-            Extends.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args));
         }
 
         public void TypeFunction<InputT, T1, T2, ReturnT>(string methodName, Func<InputT, T1, T2, ReturnT> method)
@@ -1056,13 +1091,15 @@ namespace Script
             var t1 = ScriptType.ToEnum(typeof(T1));
             var t2 = ScriptType.ToEnum(typeof(T2));
             ScriptTypes[] args = { t1, t2 };
-            Extends.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args));
         }
+
+        private List<ScriptTypeProperty> TypeProperties = new List<ScriptTypeProperty>();
 
         public void TypeProperty<InputT, ReturnT>(string propertyName, Func<InputT, ReturnT> method)
         {
             var inputT = ScriptType.ToEnum(typeof(InputT));
-            Extends.Add(new ScriptTypeProperty(inputT, propertyName, method));
+            TypeProperties.Add(new ScriptTypeProperty(inputT, propertyName, method));
         }
     }
 }

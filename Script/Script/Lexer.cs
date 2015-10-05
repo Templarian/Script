@@ -83,11 +83,10 @@ namespace Script
             nextLine();
         }
 
-        public int PrevPosition { get; private set; }
+        private Stack<KeyValuePair<int, string>> History = new Stack<KeyValuePair<int, string>>();
         public bool Next()
         {
-            PrevPosition = Position;
-            prevLineRemaining = lineRemaining;
+            History.Push(new KeyValuePair<int,string>(Position, lineRemaining));
 
             if (lineRemaining == null)
                 return false;
@@ -118,12 +117,12 @@ namespace Script
             error.DynamicInvoke(LineNumber, Position, lineRemaining);
             return false;
         }
-
+        
         public bool Prev()
         {
-            // Go back
-            Position = PrevPosition;
-            lineRemaining = prevLineRemaining;
+            var history = History.Pop();
+            Position = history.Key;
+            lineRemaining = history.Value;
             return true;
         }
 
