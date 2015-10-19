@@ -29,6 +29,10 @@ namespace Script
                     return ScriptTypes.ListString;
                 case "System.Collections.Generic.List`1[System.Boolean]":
                     return ScriptTypes.ListBoolean;
+                case "System.Text.RegularExpressions.Regex":
+                    return ScriptTypes.Regex;
+                case "System.Object":
+                    return ScriptTypes.Void;
             }
             return ScriptTypes.Null;
         }

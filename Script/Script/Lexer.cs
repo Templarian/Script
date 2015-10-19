@@ -51,13 +51,25 @@ namespace Script
         }
     }
 
-    internal sealed class Lexer : IDisposable
+    public sealed class History
+    {
+        public History(int lineNumber, int position, string lineRemaining)
+        {
+            LineNumber = lineNumber;
+            Position = position;
+            LineRemaining = lineRemaining;
+        }
+        public int LineNumber { get; set; }
+        public int Position { get; set; }
+        public string LineRemaining { get; set; }
+    }
+
+    public class Lexer : IDisposable
     {
         private readonly TextReader reader;
         private readonly TokenDefinition[] tokenDefinitions;
 
         private string lineRemaining;
-        private string prevLineRemaining;
         private Action<int, int, string> error;
 
         public Lexer(TextReader reader, TokenDefinition[] tokenDefinitions, Action<int, int, string> error)
@@ -83,13 +95,19 @@ namespace Script
             nextLine();
         }
 
-        private Stack<KeyValuePair<int, string>> History = new Stack<KeyValuePair<int, string>>();
+        private Stack<History> Past = new Stack<History>();
         public bool Next()
         {
-            History.Push(new KeyValuePair<int,string>(Position, lineRemaining));
+            Past.Push(new History(LineNumber, Position, lineRemaining));
 
             if (lineRemaining == null)
+            {
                 return false;
+            }
+            else if (lineRemaining.Length == 0) // Return true while still empty somehow.
+            {
+                nextLine();
+            }
 
             if (Position == -1)
             {
@@ -109,7 +127,7 @@ namespace Script
                     lineRemaining = lineRemaining.Substring(matched);
                     if (lineRemaining.Length == 0) // Return true while still empty somehow.
                     {
-                        nextLine();
+                        //nextLine();
                     }
                     return true;
                 }
@@ -117,12 +135,13 @@ namespace Script
             error.DynamicInvoke(LineNumber, Position, lineRemaining);
             return false;
         }
-        
+
         public bool Prev()
         {
-            var history = History.Pop();
-            Position = history.Key;
-            lineRemaining = history.Value;
+            var history = Past.Pop();
+            Position = history.Position;
+            LineNumber = history.LineNumber;
+            lineRemaining = history.LineRemaining;
             return true;
         }
 

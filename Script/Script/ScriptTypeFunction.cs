@@ -6,17 +6,26 @@ using System.Threading.Tasks;
 
 namespace Script
 {
-    public class ScriptTypeProperty
+    public class ScriptTypeFunction : ScriptTypeMethod
     {
-        public ScriptTypes ExtendType { get; set; }
-        public string Name { get; set; }
-        public Delegate Function { get; set; }
 
-        public ScriptTypeProperty (ScriptTypes extendType, string name, Delegate function)
+        public ScriptTypeFunction(ScriptTypes extendType, string name, Delegate function, ScriptTypes returnType) : base(extendType, name, function, returnType)
         {
             ExtendType = extendType;
             Name = name;
-            Function = function;
+            Method = function;
+            Types = new ScriptTypes[] { };
+            ReturnType = returnType;
         }
+
+        public ScriptTypeFunction(ScriptTypes extendType, string name, Delegate function, ScriptTypes[] types, ScriptTypes returnType) : base(extendType, name, function, types, returnType)
+        {
+            ExtendType = extendType;
+            Name = name;
+            Method = function;
+            Types = types;
+            ReturnType = returnType;
+        }
+
     }
 }

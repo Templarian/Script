@@ -7,13 +7,13 @@ namespace Script
 {
     public class ScriptScope
     {
-        public ScriptScope(ScriptError error)
+        public ScriptScope(ScriptException error)
         {
             Indent = 0;
             Error = error;
         }
 
-        private ScriptError Error { get; set; }
+        private ScriptException Error { get; set; }
 
         public int Indent { get; set; }
 

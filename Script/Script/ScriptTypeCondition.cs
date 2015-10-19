@@ -6,20 +6,21 @@ using System.Threading.Tasks;
 
 namespace Script
 {
-    public class ScriptCondition : ScriptMethod
+    public class ScriptTypeCondition : ScriptTypeMethod
     {
-        public ScriptCondition(string name, Delegate condition)
-            : base(name, condition)
+
+        public ScriptTypeCondition(ScriptTypes extendType, string name, Delegate condition) : base (extendType, name, condition)
         {
+            ExtendType = extendType;
             Name = name;
             Method = condition;
             Types = new ScriptTypes[] { };
             ReturnType = ScriptTypes.Boolean;
         }
 
-        public ScriptCondition(string name, Delegate condition, ScriptTypes[] types)
-            : base(name, condition, types, ScriptTypes.Void)
+        public ScriptTypeCondition(ScriptTypes extendType, string name, Delegate condition, ScriptTypes[] types) : base(extendType, name, condition, types)
         {
+            ExtendType = extendType;
             Name = name;
             Method = condition;
             Types = types;

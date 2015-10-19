@@ -21,7 +21,21 @@ namespace Script
         public void Execute(string script)
         {
             code = script;
-            Parse(code);
+            try
+            {
+                Parse(code);
+            }
+            catch (ScriptException e)
+            {
+                if (Error == null)
+                {
+                    throw e;
+                }
+                else
+                {
+                    Error.DynamicInvoke(e);
+                }
+            }
         }
 
         public T Evaluate<T>(string script)
@@ -91,7 +105,7 @@ namespace Script
             Depths[Indent] = !Depths[Indent];
         }
 
-        public void Exception(Action<ScriptError> error)
+        public void Exception(Action<ScriptException> error)
         {
             Error = error;
         }
@@ -114,16 +128,18 @@ namespace Script
             var defs = new TokenDefinition[]
             {
                 new TokenDefinition(@"#.*", "COMMENT"),
+                new TokenDefinition(@"/[^/]+/[ims]*", "REGEX"),
                 new TokenDefinition(@"([""'])(?:\\\1|.)*?\1", "STRING"),
                 new TokenDefinition(@"[-+]?\d*\.\d+", "DOUBLE"),
                 new TokenDefinition(@"[-+]?\d+", "INTEGER"),
                 new TokenDefinition(@"(true|false)", "BOOLEAN"),
+                new TokenDefinition(@"null", "NULL"),
                 new TokenDefinition(@"if\s?\(", "IF"),
                 new TokenDefinition(@"else if\s?\(", "ELSEIF"),
                 new TokenDefinition(@"else", "ELSE"),
                 new TokenDefinition(@"(\+|-|\*|\/)", "ARITHMETIC"),
-                new TokenDefinition(@"(int|double|string|bool)", "BASETYPE"),
                 new TokenDefinition(@"(int|double|string|bool)\[\]", "LISTTYPE"),
+                new TokenDefinition(@"(int|double|string|bool)", "BASETYPE"),
                 new TokenDefinition(@"(name|extends|event|function|condition|string|integer|double|boolean|array|return)", "KEYWORD"),
                 new TokenDefinition(@"[*<>\?\-+/A-Za-z->!][*<>\?\-+/A-Za-z0-9->!]*(\[\d+\]|)", "SYMBOL"),
                 new TokenDefinition(@"\[", "ARRAYLEFT"),
@@ -141,44 +157,49 @@ namespace Script
 
             TextReader reader = new StringReader(code);
             Lexer lexer = new Lexer(reader, defs, new Action<int, int, string>(LexerException));
-            return Return<T>(Step(lexer, this));
+            ScriptVariable value = Step(lexer, this);
+            return value.Return<T>();
         }
 
-        private T Return<T>(object value)
+        /*private T Return<T>(object value)
         {
-            if (typeof(T).GenericTypeArguments.Count() == 0)
+            var returnT = ScriptType.ToEnum(typeof(T));
+            switch (ScriptType.ToEnum(typeof(T)))
             {
-                return (T)value;
-            }
-            else
-            {
-                if (typeof(T).GenericTypeArguments[0].Name == "String")
-                {
+                case ScriptTypes.String:
+                case ScriptTypes.Integer:
+                case ScriptTypes.Double:
+                case ScriptTypes.Boolean:
+                case ScriptTypes.Regex:
+                    return (T)value;
+                case ScriptTypes.ListString:
+                    return (T)(object)((List<object>)(value)).Select(x => x.ToString()).ToList();
+                case ScriptTypes.ListInteger:
                     return (T)(object)((List<object>)(value)).Select(x => (string)x).ToList();
-                }
-                else
-                {
+                case ScriptTypes.ListDouble:
+                    return (T)(object)((List<object>)(value)).Select(x => (string)x).ToList();
+                case ScriptTypes.ListBoolean:
+                    return (T)(object)((List<object>)(value)).Select(x => (string)x).ToList();
+                default:
                     return default(T);
-                }
             }
-        }
+        }*/
 
         private void LexerException(int lineNumber, int position, string lineRemaining)
         {
-            Error.DynamicInvoke(new ScriptError
-            {
-                Message = String.Format("Invalid tokens at Line {0} Col {1}",
+            throw new ScriptException(
+                message: String.Format("Invalid tokens at Line {0} Col {1}",
                     lineNumber,
                     position),
-                LineNumber = lineNumber,
-                Position = position,
-                MethodName = "undefined"
-            });
+                row: lineNumber,
+                column: position,
+                method: "undefined"
+            );
         }
 
-        private object Step(Lexer lexer, ScriptClass classScope)
+        private ScriptVariable Step(Lexer lexer, ScriptClass classScope)
         {
-            object result = null;
+            ScriptVariable result = new ScriptVariable(null, ScriptTypes.Null);
             while (lexer.Next())
             {
                 if (lexer.Token == "BLOCK")
@@ -208,28 +229,27 @@ namespace Script
                             break;
                         }
                     }
-                    // 2. Function
-                    var functionInstances = classScope.Functions.Where(x => x.Name == lexer.TokenContents).ToList();
+                    // 2. Method
+                    var functionInstances = classScope.Methods.Where(x => x.Name == lexer.TokenContents).ToList();
                     if (functionInstances.Count() > 0)
                     {
                         Debug.WriteLine("Step Function: {0}", lexer.TokenContents);
                         if ((Indent - indentOffset) > Depths.Length)
                         {
                             var functionInstance = functionInstances.First();
-                            Error.DynamicInvoke(new ScriptError
-                            {
-                                Message = String.Format("Indented too far \"{0}\" Line {1} Col {2}",
+                            throw new ScriptException(
+                                message: String.Format("Indented too far \"{0}\" Line {1} Col {2}",
                                     functionInstance.Name,
                                     lexer.LineNumber,
                                     lexer.Position),
-                                LineNumber = lexer.LineNumber,
-                                Position = lexer.Position,
-                                MethodName = functionInstance.Name
-                            });
+                                row: lexer.LineNumber,
+                                column: lexer.Position,
+                                method: functionInstance.Name
+                            );
                         }
                         else if (Indent == 0 || Depths[Indent - 1 - indentOffset])
                         {
-                            result = StepFunction(lexer, functionInstances); // Not capturing just calling
+                            result = StepMethod(lexer, functionInstances); // Not capturing just calling
                             if (classScope.Name != null)
                             {
                                 break;
@@ -243,11 +263,9 @@ namespace Script
                         continue;
                     }
                     // 3. Property
-                    var type = ScriptTypes.Null;
                     lexer.Prev();
-                    return StepValue(lexer, out type);
-
-                    Error.DynamicInvoke(new ScriptError
+                    return StepValue(lexer);
+                    /*Error.DynamicInvoke(new ScriptError
                     {
                         Message = String.Format("Invalid class or function or property \"{0}\" Line {1} Col {2}",
                             lexer.TokenContents,
@@ -256,7 +274,7 @@ namespace Script
                         LineNumber = lexer.LineNumber,
                         Position = lexer.Position,
                         MethodName = lexer.TokenContents
-                    });
+                    });*/
                 }
                 else if (lexer.Token == "LISTTYPE")
                 {
@@ -278,17 +296,17 @@ namespace Script
                 }
                 else if (lexer.Token == "BASETYPE")
                 {
+                    var tempType = lexer.TokenContents;
                     lexer.Next();
                     if (lexer.Token == "LEFT")
                     {
-                        lexer.Prev();
                         lexer.Prev(); // LEFT
                         lexer.Prev(); // BASETYPE
                         return StepValue(lexer);
                     }
                     else if (lexer.Token == "SPACE")
                     {
-                        switch (lexer.TokenContents)
+                        switch (tempType)
                         {
                             case "string":
                                 StepProperty<string>(lexer, classScope);
@@ -307,11 +325,11 @@ namespace Script
                 }
                 else if (lexer.Token == "IF")
                 {
-                    var check = DepthCondition(StepCondition(lexer, classScope));
+                    var val = StepValue(lexer);
+                    var check = DepthCondition(val.Return<bool>());
                     if (check == null)
                     {
-                        Debug.WriteLine("If: ERROR");
-                        return null;
+                        throw new ScriptException("error in if");
                     }
                     Debug.WriteLine("If: {0}", Depths[Indent]);
                 }
@@ -319,11 +337,11 @@ namespace Script
                 {
                     if (DepthValidCondition()) // Previous has to be false
                     {
-                        var check = DepthCondition(StepCondition(lexer, classScope));
+                        var check = DepthCondition(StepValue(lexer).Return<bool>());
                         if (check == null)
                         {
                             Debug.WriteLine("Else If: ERROR");
-                            return null;
+                            throw new ScriptException("error in if");
                         }
                         Debug.WriteLine("Else If: {0}", Depths[Indent]);
                     }
@@ -344,11 +362,30 @@ namespace Script
                     DepthInverseCondition();
                     Debug.WriteLine("Else: {0}", Depths[Indent]);
                 }
+                else if (lexer.Token == "STRING")
+                {
+                    lexer.Prev();
+                    return StepValue(lexer);
+                }
                 else if (lexer.Token == "INTEGER")
                 {
-                    var type = ScriptTypes.Null;
                     lexer.Prev();
-                    return StepValue(lexer, out type);
+                    return StepValue(lexer);
+                }
+                else if (lexer.Token == "DOUBLE")
+                {
+                    lexer.Prev();
+                    return StepValue(lexer);
+                }
+                else if (lexer.Token == "BOOLEAN")
+                {
+                    lexer.Prev();
+                    return StepValue(lexer);
+                }
+                else if (lexer.Token == "NULL")
+                {
+                    lexer.Prev();
+                    return StepValue(lexer);
                 }
                 else if (lexer.Token == "KEYWORD")
                 {
@@ -360,12 +397,18 @@ namespace Script
                 //Debug.WriteLine("Token: {0} Contents: {1}", lexer.Token, lexer.TokenContents);
             }
             return result;
+            throw new ScriptException(
+                message: String.Format("Invalid lexer step on Line {1} Col {2}",
+                    lexer.LineNumber,
+                    lexer.Position),
+                row: lexer.LineNumber,
+                column: lexer.Position
+            );
         }
 
         private void StepProperty<T>(Lexer lexer, ScriptClass classScope)
         {
             var name = "";
-            var type = ScriptTypes.Null;
             while (lexer.Next())
             {
                 if (lexer.Token == "SPACE") { }
@@ -375,7 +418,7 @@ namespace Script
                 }
                 else if (name != "" && lexer.Token == "ASSIGNMENT")
                 {
-                    SetProperty<T>(name, StepValue(lexer, out type));
+                    SetVariable<T>(name, StepValue(lexer));
                     return;
                 }
                 else
@@ -385,64 +428,199 @@ namespace Script
             }
         }
 
+        /*private bool TryCast<ReturnT>(ScriptTypes inputType, object value, out ReturnT outValue)
+        {
+            var outputType = ScriptType.ToEnum(typeof(ReturnT));
+            switch (outputType)
+            {
+                case ScriptTypes.String:
+                    switch (inputType)
+                    {
+                        case ScriptTypes.String:
+                            outValue = Return<ReturnT>(value);
+                            return true;
+                        case ScriptTypes.Integer:
+                        case ScriptTypes.Double:
+                            outValue = Return<ReturnT>(value.ToString());
+                            return true;
+                        case ScriptTypes.Boolean:
+                            outValue = Return<ReturnT>(Return<bool>(value) ? "true" : "false");
+                            return true;
+                        case ScriptTypes.Null:
+                            outValue = Return<ReturnT>("null");
+                            return true;
+                    }
+                    break;
+                case ScriptTypes.Integer:
+                    switch (inputType)
+                    {
+                        case ScriptTypes.String:
+                            outValue = Return<ReturnT>(value);
+                            return true;
+                        case ScriptTypes.Integer:
+                            int tryInt = 0;
+                            if (int.TryParse(value.ToString(), out tryInt))
+                            {
+                                outValue = Return<ReturnT>(tryInt);
+                                return true;
+                            }
+                            else
+                            {
+                                outValue = Return<ReturnT>(0);
+                                return false;
+                            }
+                        case ScriptTypes.Double:
+                            double tryDouble = 0;
+                            if (double.TryParse(value.ToString(), out tryDouble))
+                            {
+                                outValue = Return<ReturnT>(tryDouble);
+                                return true;
+                            }
+                            else
+                            {
+                                outValue = Return<ReturnT>(0);
+                                return false;
+                            }
+                        case ScriptTypes.Boolean:
+                            outValue = Return<ReturnT>(Return<bool>(value) ? "true" : "false");
+                            return true;
+                    }
+                    break;
+                case ScriptTypes.Double:
+                    switch (inputType)
+                    {
+
+                        case ScriptTypes.Double:
+                            outValue = Return<ReturnT>(value);
+                            return true;
+                        case ScriptTypes.String:
+                        case ScriptTypes.Integer:
+                            double tryDouble = 0;
+                            if (double.TryParse(value.ToString(), out tryDouble))
+                            {
+                                outValue = Return<ReturnT>(tryDouble);
+                                return true;
+                            }
+                            else
+                            {
+                                outValue = Return<ReturnT>(0.0);
+                                return false;
+                            }
+                    }
+                    break;
+                case ScriptTypes.Boolean:
+                    outValue = Return<ReturnT>(value);
+                    return true;
+                case ScriptTypes.ListString:
+                case ScriptTypes.ListInteger:
+                case ScriptTypes.ListDouble:
+                case ScriptTypes.ListBoolean:
+                    outValue = Return<ReturnT>(value);
+                    return true;
+                case ScriptTypes.Void:
+                    outValue = default(ReturnT);
+                    return true;
+            }
+            outValue = Return<ReturnT>(null);
+            return false;
+        }
+
+        private ReturnT Cast<ReturnT>(Lexer lexer, ScriptTypes inputType, object value)
+        {
+            var outputType = ScriptType.ToEnum(typeof(ReturnT));
+            if (TryCast<ReturnT>(inputType, value, out outValue))
+            {
+                return outValue;
+            }
+            lexer.Prev();
+            lexer.Prev();
+            Error.DynamicInvoke(new ScriptException(
+                message: String.Format("Unable to cast value '{0}' from '{1}' to '{2}' on Line {3} Col {4}",
+                    value.ToString(),
+                    inputType.ToString(),
+                    outputType.ToString(),
+                    lexer.LineNumber,
+                    lexer.Position),
+                row: lexer.LineNumber,
+                column: lexer.Position,
+                method: lexer.TokenContents
+            );
+        }*/
+
+        private ReturnT StepValue<ReturnT>(Lexer lexer)
+        {
+            var value = StepValue(lexer);
+            return value.Cast<ReturnT>(lexer).Return<ReturnT>();
+        }
+
         /// <summary>
         /// Step for complex value
         /// </summary>
         /// <param name="lexer">Lexer</param>
         /// <returns>Valid value or null</returns>
-        private object StepValue(Lexer lexer, out ScriptTypes type)
+        private ScriptVariable StepValue(Lexer lexer)
         {
-            type = ScriptTypes.Null;
-            object value = null;
+            var current = new ScriptVariable(null, ScriptTypes.Undefined);
             while (lexer.Next())
             {
-                if (lexer.Token == "SPACE") { }
+                if (lexer.Token == "SPACE") { continue; }
                 else if (lexer.Token == "BLOCK")
                 {
-                    return value;
+                    return current;
+                }
+                else if (lexer.Token == "NULL")
+                {
+                    current.Type = ScriptTypes.Null;
+                    current.Value = null;
                 }
                 else if (lexer.Token == "BASETYPE")
                 {
-                    switch(lexer.TokenContents)
+                    var castType = lexer.TokenContents;
+                    lexer.Next();
+                    if (lexer.Token == "LEFT")
                     {
-                        case "string":
-                            return Return<string>(StepValue(lexer));
-                        case "int":
+                        var fromValue = StepValue(lexer);
+                        switch (castType)
+                        {
+                            case "string":
+                                return fromValue.Cast<string>(lexer);
+                            case "int":
+                                return fromValue.Cast<int>(lexer);
+                            case "double":
+                                return fromValue.Cast<double>(lexer);
+                            case "bool":
+                                return fromValue.Cast<bool>(lexer);
+                        }
 
-                            break;
-                        case "double":
-
-                            break;
-                        case "bool":
-
-                            break;
                     }
+                    // Error should be impossible
+                }
+                else if (lexer.Token == "COMMA" || lexer.Token == "ARRAYRIGHT")
+                {
+                    lexer.Prev();
+                    return current;
                 }
                 else if (lexer.Token == "DOT")
                 {
                     lexer.Next();
                     if (lexer.Token == "SYMBOL")
                     {
-                        var match = TypeFunctions.Where(x => x.Name == lexer.TokenContents).FirstOrDefault();
-                        if (match == null)
+                        var typeFunctionInstances = TypeFunctions.Where(x => x.ExtendType == current.Type && x.Name == lexer.TokenContents).Select(x => (ScriptTypeMethod)x).ToList();
+                        if (typeFunctionInstances.Count() > 0)
                         {
-                            /*Error.DynamicInvoke(new ScriptError
-                            {
-                                Message = String.Format("Property '{0}' contains {1} items (not {2}) on Line {3} Col {4}",
-                                        property.Name,
-                                        list.Count(),
-                                        index + 1,
+                            current = StepTypeFunction(lexer, typeFunctionInstances, current);
+                            continue;
+                        }
+                        throw new ScriptException(
+                            message: String.Format("Type '{0}' has no method named '{1}' on Line {2} Col {3}",
+                                        current.Type.ToString(),
+                                        lexer.TokenContents,
                                         lexer.LineNumber,
                                         lexer.Position),
-                                LineNumber = lexer.LineNumber,
-                                Position = lexer.Position,
-                                MethodName = lexer.TokenContents
-                            });*/
-                        }
-                        else
-                        {
-                            var foo = ""; // return value from match.method
-                        }
+                            row: lexer.LineNumber,
+                            column: lexer.Position,
+                            method: lexer.TokenContents
+                        );
                     }
                 }
                 else if (lexer.Token == "SYMBOL")
@@ -450,346 +628,275 @@ namespace Script
                     var matches = Regex.Matches(lexer.TokenContents, @"^([^\[\]]+?)(\[(\d+)\])?$");
                     if (matches[0].Groups[3].Success) // Is as List
                     {
-                        var property = Property.FirstOrDefault(p => p.Name == matches[0].Groups[1].Value);
+                        var property = Variables.FirstOrDefault(p => p.Name == matches[0].Groups[1].Value);
                         if (property != null)
                         {
                             var index = int.Parse(matches[0].Groups[3].Value);
-                            var list = ((List<object>)(property.Value));
+                            var list = ((List<ScriptVariable>)(property.Value));
                             if (index >= list.Count())
                             {
-                                Error.DynamicInvoke(new ScriptError
-                                {
-                                    Message = String.Format("Property '{0}' contains {1} items (not {2}) on Line {3} Col {4}",
+                                throw new ScriptException(
+                                    message: String.Format("Property '{0}' contains {1} items (not {2}) on Line {3} Col {4}",
                                         property.Name,
                                         list.Count(),
                                         index + 1,
                                         lexer.LineNumber,
                                         lexer.Position),
-                                    LineNumber = lexer.LineNumber,
-                                    Position = lexer.Position,
-                                    MethodName = lexer.TokenContents
-                                });
+                                    row: lexer.LineNumber,
+                                    column: lexer.Position,
+                                    method: lexer.TokenContents
+                                );
                             }
                             switch (property.Type)
                             {
                                 case ScriptTypes.ListString:
-                                    return list.Select(i => i.ToString()).ToList()[index];
                                 case ScriptTypes.ListInteger:
-                                    return ((List<int>)property.Value)[index];
                                 case ScriptTypes.ListDouble:
-                                    return ((List<double>)property.Value)[index];
                                 case ScriptTypes.ListBoolean:
-                                    return ((List<bool>)property.Value)[index];
-                                default:
-                                    // error
-                                    break;
+                                    return list[index];
                             }
-                            return null;
+                            throw new ScriptException(
+                                message: String.Format("Type '{0}' has no method named '{1}' on Line {2} Col {3}",
+                                            current.Type.ToString(),
+                                            lexer.TokenContents,
+                                            lexer.LineNumber,
+                                            lexer.Position),
+                                row: lexer.LineNumber,
+                                column: lexer.Position,
+                                method: lexer.TokenContents
+                            );
                         }
                     }
                     else
                     {
-                        var property = Property.FirstOrDefault(p => p.Name == matches[0].Groups[1].Value);
+                        var property = Variables.FirstOrDefault(p => p.Name == matches[0].Groups[1].Value);
                         if (property != null)
                         {
-                            type = property.Type;
-                            value = property.Value;
+                            current.Type = property.Type;
+                            current.Value = property.Value;
                         }
+                    }
+                    // Methods
+                    var methodInstances = Methods.Where(x => x.Name == lexer.TokenContents).ToList();
+                    if (methodInstances.Count() > 0)
+                    {
+                        current = StepMethod(lexer, methodInstances);
                     }
                 }
                 else if (lexer.Token == "RIGHT")
                 {
                     // No pemdas support, fix this later on!
-                    return value;
+                    return current;
                 }
                 else if (lexer.Token == "ARRAYLEFT")
                 {
-                    type = ScriptTypes.Null;
-                    value = StepList(lexer, out type);
+                    current = StepList(lexer);
                 }
                 else if (lexer.Token == "STRING")
                 {
-                    type = ScriptTypes.String;
-                    value = lexer.TokenContents.Substring(1, lexer.TokenContents.Length - 2);
+                    if (current.Type != ScriptTypes.Undefined) {
+                        lexer.Prev();
+                        throw new ScriptException(
+                            message: String.Format("Unexpected string on Line {0} Col {1}",
+                                lexer.LineNumber,
+                                lexer.Position),
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
+                    }
+                    current.Type = ScriptTypes.String;
+                    current.Value = lexer.TokenContents.Substring(1, lexer.TokenContents.Length - 2);
                 }
                 else if (lexer.Token == "INTEGER")
                 {
-                    type = ScriptTypes.Integer;
-                    value = int.Parse(lexer.TokenContents);
+                    current.Type = ScriptTypes.Integer;
+                    current.Value = int.Parse(lexer.TokenContents);
                 }
                 else if (lexer.Token == "DOUBLE")
                 {
-                    type = ScriptTypes.Double;
-                    value = double.Parse(lexer.TokenContents);
+                    current.Type = ScriptTypes.Double;
+                    current.Value = double.Parse(lexer.TokenContents);
                 }
                 else if (lexer.Token == "BOOLEAN")
                 {
-                    type = ScriptTypes.Boolean;
-                    value = lexer.TokenContents == "true";
+                    current.Type = ScriptTypes.Boolean;
+                    current.Value = lexer.TokenContents == "true";
+                }
+                else if (lexer.Token == "REGEX")
+                {
+                    if (current.Type != ScriptTypes.Undefined) { return current; }
+                    current.Type = ScriptTypes.Regex;
+                    var optionsChars = lexer.TokenContents.Substring(lexer.TokenContents.LastIndexOf('/') + 1).ToCharArray();
+                    var options = RegexOptions.ECMAScript;
+                    if (optionsChars.Contains('i'))
+                    {
+                        options |= RegexOptions.IgnoreCase;
+                    }
+                    if (optionsChars.Contains('m'))
+                    {
+                        options |= RegexOptions.Multiline;
+                    }
+                    if (optionsChars.Contains('s'))
+                    {
+                        options |= RegexOptions.Singleline;
+                    }
+                    current.Value = new Regex(lexer.TokenContents.Substring(1, lexer.TokenContents.LastIndexOf('/') - 1), options);
+                }
+                else if (lexer.Token == "OPERATOR")
+                {
+                    if (lexer.TokenContents == "and")
+                    {
+                        current.Value = current.Cast<bool>(lexer).Return<bool>() && StepValue<bool>(lexer);
+                    }
+                    else if (lexer.TokenContents == "or")
+                    {
+                        current.Value = current.Cast<bool>(lexer).Return<bool>() || StepValue<bool>(lexer);
+                    }
                 }
                 else if (lexer.Token == "ARITHMETIC")
                 {
-                    switch (lexer.TokenContents)
+                    var symbol = lexer.TokenContents;
+                    var next = StepValue(lexer);
+                    switch (symbol)
                     {
                         case "+":
-                            switch (type)
+                            if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.Integer)
                             {
-                                case ScriptTypes.String:
-
-                                    break;
-                                case ScriptTypes.Integer:
-                                    var nextValue = StepValue(lexer, out type);
-                                    switch (type)
-                                    {
-                                        case ScriptTypes.String:
-                                            type = ScriptTypes.String;
-                                            value = value.ToString() + nextValue.ToString();
-                                            break;
-                                        case ScriptTypes.Integer:
-                                            type = ScriptTypes.Integer;
-                                            value = (int)value + (int)nextValue;
-                                            break;
-                                        case ScriptTypes.Double:
-                                            type = ScriptTypes.Double;
-                                            value = (int)value + (double)nextValue;
-                                            break;
-                                        case ScriptTypes.Boolean:
-                                            type = ScriptTypes.String;
-                                            value = value.ToString() + ((bool)nextValue ? "true" : "false");
-                                            break;
-                                        case ScriptTypes.ListString:
-                                            type = ScriptTypes.String;
-                                            var listString = ((List<object>)nextValue).Select(s => s.ToString()).ToList();
-                                            value = value.ToString() + string.Join(", ", listString);
-                                            break;
-                                        case ScriptTypes.ListInteger:
-                                            type = ScriptTypes.String;
-                                            var listInteger = (List<int>)(nextValue);
-                                            value = value.ToString() + string.Join(", ", listInteger);
-                                            break;
-                                        case ScriptTypes.ListDouble:
-                                            type = ScriptTypes.String;
-                                            var listDouble = (List<double>)(nextValue);
-                                            value = value.ToString() + string.Join(", ", listDouble);
-                                            break;
-                                        case ScriptTypes.ListBoolean:
-                                            type = ScriptTypes.String;
-                                            var listBoolean = (List<bool>)(nextValue);
-                                            value = value.ToString() + string.Join(", ", listBoolean.Select(b => b ? "true" : "false"));
-                                            break;
-                                    }
-                                    break;
+                                current.Value = (int)current.Value + (int)next.Value;
+                                current.Type = ScriptTypes.Integer;
+                            }
+                            else if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.ListString)
+                            {
+                                current.Value = current.Value.ToString() + string.Join(",", next.Return<List<string>>());
+                                current.Type = ScriptTypes.String;
+                            }
+                            else if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.Double)
+                            {
+                                current.Value = current.Cast<double>(lexer).Return<double>() + next.Cast<double>(lexer).Return<double>();
+                                current.Type = ScriptTypes.Double;
+                            }
+                            else
+                            {
+                                current.Value = current.Value.ToString() + next.Value.ToString();
+                                current.Type = ScriptTypes.String;
                             }
                             break;
                         case "-":
-                            if (type == ScriptTypes.Integer)
+                            if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.Integer)
                             {
-                                var nextValue = StepValue(lexer, out type);
-                                if (type == ScriptTypes.String)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'-\' with data types {0} and String Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
-                                else if (type == ScriptTypes.Integer)
-                                {
-                                    type = ScriptTypes.Integer;
-                                    value = (int)value - (int)nextValue;
-                                }
-                                else if (type == ScriptTypes.Double)
-                                {
-                                    type = ScriptTypes.Double;
-                                    value = (int)value - (double)nextValue;
-                                }
-                                else if (type == ScriptTypes.Boolean)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'-\' with data types {0} and Boolean Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
-                                else if (type == ScriptTypes.ListString)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'-\' with data types {0} and ListString Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
+                                current.Value = (int)current.Value - (int)next.Value;
+                                current.Type = ScriptTypes.Integer;
+                            }
+                            else
+                            {
+                                current.Value = current.Cast<double>(lexer).Return<double>() - next.Cast<double>(lexer).Return<double>();
+                                current.Type = ScriptTypes.Double;
                             }
                             break;
                         case "*":
-                            if (type == ScriptTypes.Integer)
+                            if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.Integer)
                             {
-                                var nextValue = StepValue(lexer, out type);
-                                if (type == ScriptTypes.String)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'*\' with data types {0} and String Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
-                                else if (type == ScriptTypes.Integer)
-                                {
-                                    type = ScriptTypes.Integer;
-                                    value = (int)value * (int)nextValue;
-                                }
-                                else if (type == ScriptTypes.Double)
-                                {
-                                    type = ScriptTypes.Double;
-                                    value = (int)value * (double)nextValue;
-                                }
-                                else if (type == ScriptTypes.Boolean)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'*\' with data types {0} and Boolean Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
-                                else if (type == ScriptTypes.ListString)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'*\' with data types {0} and ListString Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
+                                current.Value = (int)current.Value * (int)next.Value;
+                                current.Type = ScriptTypes.Integer;
+                            }
+                            else
+                            {
+                                current.Value = current.Cast<double>(lexer).Return<double>() * next.Cast<double>(lexer).Return<double>();
+                                current.Type = ScriptTypes.Double;
                             }
                             break;
                         case "/":
-                            if (type == ScriptTypes.Integer)
+                            if (current.Type == ScriptTypes.Integer)
                             {
-                                var nextValue = StepValue(lexer, out type);
-                                if (type == ScriptTypes.String)
+                                if (current.Type == ScriptTypes.Integer && next.Type == ScriptTypes.Integer)
                                 {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'/\' with data types {0} and String Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
+                                    current.Value = current.Cast<double>(lexer).Return<double>() / next.Cast<double>(lexer).Return<double>();
+                                    current.Type = ScriptTypes.Double;
                                 }
-                                else if (type == ScriptTypes.Integer)
+                                else
                                 {
-                                    type = ScriptTypes.Integer;
-                                    value = (int)value / (int)nextValue;
-                                }
-                                else if (type == ScriptTypes.Double)
-                                {
-                                    type = ScriptTypes.Double;
-                                    value = (int)value / (double)nextValue;
-                                }
-                                else if (type == ScriptTypes.Boolean)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'/\' with data types {0} and Boolean Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
-                                }
-                                else if (type == ScriptTypes.ListString)
-                                {
-                                    Error.DynamicInvoke(new ScriptError
-                                    {
-                                        Message = String.Format("Invalid operator \'/\' with data types {0} and ListString Line {1} Col {2}",
-                                            type.ToString(),
-                                            lexer.LineNumber,
-                                            lexer.Position),
-                                        LineNumber = lexer.LineNumber,
-                                        Position = lexer.Position,
-                                        MethodName = lexer.TokenContents
-                                    });
+                                    current.Value = current.Cast<double>(lexer).Return<double>() / next.Cast<double>(lexer).Return<double>();
+                                    current.Type = ScriptTypes.Double;
                                 }
                             }
                             break;
                     }
                 }
+                else
+                {
+                    return current;
+                }
             }
             // Syntax error thrown here
-            return value;
+            return current;
         }
 
-        /// <summary>
-        /// Step value returning object.
-        /// </summary>
-        /// <param name="lexer"></param>
-        /// <returns></returns>
-        private object StepValue(Lexer lexer)
+        private ScriptVariable StepList(Lexer lexer)
         {
-            var type = ScriptTypes.Null;
-            return StepValue(lexer, out type);
-        }
-
-        private object StepList(Lexer lexer, out ScriptTypes type)
-        {
-            type = ScriptTypes.Null;
-            var items = new List<object>();
+            var type = ScriptTypes.Undefined;
+            var items = new List<ScriptVariable>();
+            var hasComma = true;
             while (lexer.Next())
             {
                 if (lexer.Token == "SPACE") { }
                 else if (lexer.Token == "ARRAYRIGHT")
                 {
-                    return items;
+                    type = type == ScriptTypes.String ? ScriptTypes.ListString
+                        : type == ScriptTypes.Integer ? ScriptTypes.ListInteger
+                        : type == ScriptTypes.Double ? ScriptTypes.ListDouble
+                        : type == ScriptTypes.Boolean ? ScriptTypes.ListBoolean
+                        : ScriptTypes.Undefined;
+                    return new ScriptVariable(items, type);
                 }
-                else if (lexer.Token == "STRING")
+                else if (lexer.Token == "COMMA")
+                {
+                    hasComma = true;
+                }
+                else if (hasComma)
+                {
+                    lexer.Prev();
+                    var variable = StepValue(lexer);
+                    if (type == ScriptTypes.Undefined)
+                    {
+                        type = variable.Type;
+                    }
+                    else if (type != variable.Type)
+                    {
+                        throw new ScriptException(
+                            message: String.Format("Invalid data type '{0}' in '{1}' list near Line {2} Col {3}",
+                                type.ToString(),
+                                "unknown",
+                                lexer.LineNumber,
+                                lexer.Position),
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
+                    }
+                    items.Add(variable);
+                    hasComma = false;
+                }
+                else
+                {
+                    throw new ScriptException(
+                        message: String.Format("Missing \",\" near Line {0} Col {1}",
+                            lexer.LineNumber,
+                            lexer.Position),
+                        row: lexer.LineNumber,
+                        column: lexer.Position
+                    );
+                }
+                /*if (lexer.Token == "STRING")
                 {
                     if (!(type == ScriptTypes.Null || type == ScriptTypes.ListString))
                     {
-                        Error.DynamicInvoke(new ScriptError
-                        {
-                            Message = String.Format("Invalid STRING found in {0} at Line {1} Col {2}",
+                        throw new ScriptException(
+                            message: String.Format("Invalid STRING found in {0} at Line {1} Col {2}",
                                 type.ToString(),
                                 lexer.LineNumber,
                                 lexer.Position),
-                            LineNumber = lexer.LineNumber,
-                            Position = lexer.Position,
-                            MethodName = "undefined"
-                        });
-                        return items;
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
                     }
                     items.Add(lexer.TokenContents.Substring(1, lexer.TokenContents.Length - 2));
                     type = ScriptTypes.ListString;
@@ -798,17 +905,14 @@ namespace Script
                 {
                     if (!(type == ScriptTypes.Null || type != ScriptTypes.ListDouble))
                     {
-                        Error.DynamicInvoke(new ScriptError
-                        {
-                            Message = String.Format("Invalid DOUBLE found in {0} at Line {1} Col {2}",
+                        throw new ScriptException(
+                            message: String.Format("Invalid DOUBLE found in {0} at Line {1} Col {2}",
                                 type.ToString(),
                                 lexer.LineNumber,
                                 lexer.Position),
-                            LineNumber = lexer.LineNumber,
-                            Position = lexer.Position,
-                            MethodName = "undefined"
-                        });
-                        return items;
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
                     }
                     items.Add(double.Parse(lexer.TokenContents));
                 }
@@ -816,17 +920,14 @@ namespace Script
                 {
                     if (!(type == ScriptTypes.Null || type != ScriptTypes.ListInteger))
                     {
-                        Error.DynamicInvoke(new ScriptError
-                        {
-                            Message = String.Format("Invalid INTEGER found in {0} at Line {1} Col {2}",
+                        throw new ScriptException(
+                            message: String.Format("Invalid INTEGER found in {0} at Line {1} Col {2}",
                                 type.ToString(),
                                 lexer.LineNumber,
                                 lexer.Position),
-                            LineNumber = lexer.LineNumber,
-                            Position = lexer.Position,
-                            MethodName = "undefined"
-                        });
-                        return items;
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
                     }
                     items.Add(int.Parse(lexer.TokenContents));
                 }
@@ -834,100 +935,191 @@ namespace Script
                 {
                     if (!(type == ScriptTypes.Null || type != ScriptTypes.ListBoolean))
                     {
-                        Error.DynamicInvoke(new ScriptError
-                        {
-                            Message = String.Format("Invalid BOOLEAN found in {0} at Line {1} Col {2}",
+                        throw new ScriptException(
+                            message: String.Format("Invalid BOOLEAN found in {0} at Line {1} Col {2}",
                                 type.ToString(),
                                 lexer.LineNumber,
                                 lexer.Position),
-                            LineNumber = lexer.LineNumber,
-                            Position = lexer.Position,
-                            MethodName = "undefined"
-                        });
-                        return items;
+                            row: lexer.LineNumber,
+                            column: lexer.Position
+                        );
                     }
                     items.Add(lexer.TokenContents == "true");
-                }
+                }*/
             }
-            Error.DynamicInvoke(new ScriptError
-            {
-                Message = String.Format("Missing \"]\" near Line {0} Col {1}",
+            throw new ScriptException(
+                message: String.Format("Missing \"]\" near Line {0} Col {1}",
                     lexer.LineNumber,
                     lexer.Position),
-                LineNumber = lexer.LineNumber,
-                Position = lexer.Position,
-                MethodName = "undefined"
-            });
-            return items;
+                row: lexer.LineNumber,
+                column: lexer.Position
+            );
         }
+
         /// <summary>
-        /// THIS NEEDS AN ENTIRE REWRITE TO USE THE UNIVERSAL STEP VALUE METHOD!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        /// Simply call the StepFunction
         /// </summary>
         /// <param name="lexer"></param>
         /// <param name="functionInstances"></param>
         /// <returns></returns>
-        private object StepFunction(Lexer lexer, List<ScriptFunction> functionInstances)
+        private ScriptVariable StepTypeFunction(Lexer lexer, List<ScriptTypeMethod> functionTypeInstances, ScriptVariable parentValue)
         {
-            var openParentheses = false;
-            var type = ScriptTypes.Null;
-            List<KeyValuePair<ScriptTypes, object>> args = new List<KeyValuePair<ScriptTypes, object>>();
+            return StepTypeMethod(lexer, functionTypeInstances, parentValue);
+        }
+
+        private ScriptVariable StepMethod(Lexer lexer, List<ScriptMethod> functionInstances)
+        {
+            return StepMethod(lexer, functionInstances, new ScriptVariable(null, ScriptTypes.Undefined));
+        }
+
+        private List<ScriptVariable> StepArguments(Lexer lexer)
+        {
+            List<ScriptVariable> args = new List<ScriptVariable>();
             string MethodName = lexer.TokenContents;
+
             while (lexer.Next())
             {
                 if (lexer.Token == "LEFT")
                 {
-                    openParentheses = true;
-                    do
+                    var usedComma = true;
+                    while (lexer.Next())
                     {
-                        if (lexer.Token == "COMMA")
+                        if (lexer.Token == "SPACE") { }
+                        else if (lexer.Token == "COMMA")
                         {
-
+                            usedComma = true;
+                        }
+                        else if (lexer.Token == "RIGHT")
+                        {
+                            goto DoneArgs;
                         }
                         else
                         {
-                            var value = StepValue(lexer, out type);
-                            args.Add(new KeyValuePair<ScriptTypes, object>(type, value));
+                            if (usedComma)
+                            {
+                                lexer.Prev();
+                                args.Add(StepValue(lexer));
+                                usedComma = false;
+                                if (lexer.Token == "RIGHT")
+                                {
+                                    goto DoneArgs;
+                                }
+                                else
+                                {
+                                    //lexer.Prev();
+                                }
+                            }
+                            else
+                            {
+                                throw new ScriptException(
+                                    message: String.Format("Missing comma in function call \"{0}\" Line {1} Col {2}",
+                                        MethodName,
+                                        lexer.LineNumber,
+                                        lexer.Position),
+                                    row: lexer.LineNumber,
+                                    column: lexer.Position,
+                                    method: MethodName
+                                );
+                            }
                         }
-                        if (lexer.Token == "RIGHT")
-                        {
-                            break;
-                        }
-                    } while (lexer.Next());
-                    if (lexer.Token == "RIGHT")
-                    {
-                        break;
                     }
                 }
-                else if (lexer.Token == "RIGHT")
-                {
-                    return null;
-                }
+            }
+            DoneArgs:
+            return args;
+        }
+
+        private ScriptVariable StepMethod(Lexer lexer, List<ScriptMethod> functionInstances, ScriptVariable parentValue)
+        {
+            var args = StepArguments(lexer);
+            if (args == null)
+            {
+                throw new ScriptException(
+                    message: String.Format("Syntax error in arguments for \"{0}\" Line {1} Col {2}",
+                        "test",
+                        lexer.LineNumber,
+                        lexer.Position),
+                    row: lexer.LineNumber,
+                    column: lexer.Position,
+                    method: "test"
+                );
             }
             foreach (var functionInstance in functionInstances)
             {
-                if (args.Select(pair => pair.Key).SequenceEqual(functionInstance.Types))
+                if (args.Select(pair => pair.Type).SequenceEqual(functionInstance.Types))
                 {
-                    return functionInstance.Function.DynamicInvoke(args.Select(pair =>
+                    if (parentValue.Type != ScriptTypes.Undefined)
                     {
-                        if (pair.Key == ScriptTypes.ListString)
+                        args.Insert(0, parentValue);
+                    }
+                    return new ScriptVariable(functionInstance.Method.DynamicInvoke(args.Select(pair =>
+                    {
+                        switch (pair.Type)
                         {
-                            return this.Return<List<string>>(pair.Value);
+                            case ScriptTypes.Regex:
+                                return pair.Return<Regex>();
+                            case ScriptTypes.ListString:
+                                return pair.Return<List<string>>();
+                            default:
+                                return pair.Value;
                         }
-                        return pair.Value;
-                    }).ToArray());
+                    }).ToArray()), functionInstance.ReturnType);
                 }
             }
-            Error.DynamicInvoke(new ScriptError
-            {
-                Message = String.Format("Invalid arguments in \"{0}\" Line {1} Col {2}",
-                    MethodName,
+            throw new ScriptException(
+                message: String.Format("Invalid arguments in \"{0}\" Line {1} Col {2}",
+                    "test",
                     lexer.LineNumber,
                     lexer.Position),
-                LineNumber = lexer.LineNumber,
-                Position = lexer.Position,
-                MethodName = MethodName
-            });
-            return null;
+                row: lexer.LineNumber,
+                column: lexer.Position,
+                method: "test"
+            );
+        }
+
+        private ScriptVariable StepTypeMethod(Lexer lexer, List<ScriptTypeMethod> functionInstances, ScriptVariable parentValue)
+        {
+            var args = StepArguments(lexer);
+            foreach (var functionInstance in functionInstances)
+            {
+                if (args.Select(pair => pair.Type).SequenceEqual(functionInstance.Types))
+                {
+                    if (parentValue.Type != ScriptTypes.Undefined)
+                    {
+                        args.Insert(0, parentValue);
+                    }
+                    var returnVariable = functionInstance.Method.DynamicInvoke(args.Select(pair =>
+                    {
+                        switch (pair.Type)
+                        {
+                            case ScriptTypes.Regex:
+                                return pair.Return<Regex>();
+                            case ScriptTypes.ListString:
+                                return pair.Return<List<string>>();
+                            default:
+                                return pair.Value;
+                        }
+                    }).ToArray());
+                    switch(functionInstance.ReturnType)
+                    {
+                        case ScriptTypes.ListString:
+                        case ScriptTypes.ListInteger:
+                        case ScriptTypes.ListDouble:
+                        case ScriptTypes.ListBoolean:
+                            return new ScriptVariable(((List<string>)returnVariable).Select(x => new ScriptVariable(x, ScriptTypes.String)).ToList(), functionInstance.ReturnType);
+                        default:
+                            return new ScriptVariable(returnVariable, functionInstance.ReturnType);
+                    }
+                }
+            }
+            throw new ScriptException(
+                message: String.Format("Invalid arguments in \"{0}\" Line {1} Col {2}",
+                    "test",
+                    lexer.LineNumber,
+                    lexer.Position),
+                row: lexer.LineNumber,
+                column: lexer.Position
+            );
         }
 
         private void StepArray(Lexer lexer, out ScriptTypes type, out object list)
@@ -960,20 +1152,17 @@ namespace Script
                     list = array.ToList();
                 }
             }
-            Error.DynamicInvoke(new ScriptError
-            {
-                Message = String.Format("Invalid list syntax Line {0} Col {1}",
+            throw new ScriptException(
+                message: String.Format("Invalid list syntax Line {0} Col {1}",
                     lexer.LineNumber,
                     lexer.Position),
-                LineNumber = lexer.LineNumber,
-                Position = lexer.Position,
-                MethodName = "array"
-            });
-            list = null;
-            type = ScriptTypes.Null;
+                row: lexer.LineNumber,
+                column: lexer.Position,
+                method: "array"
+            );
         }
 
-        private Nullable<bool> StepCondition(Lexer lexer, ScriptClass classInstance)
+        /*private Nullable<bool> StepCondition(Lexer lexer, ScriptClass classInstance)
         {
             var result = false;
             while (lexer.Next())
@@ -1041,7 +1230,7 @@ namespace Script
                 }
             }
             return false; /// needs to throw error
-        }
+        }*/
 
         private void TriggerEvent(Lexer lexer, ScriptClass classInstance)
         {
@@ -1074,15 +1263,17 @@ namespace Script
         public void TypeFunction<InputT, ReturnT>(string methodName, Func<InputT, ReturnT> method)
         {
             var inputT = ScriptType.ToEnum(typeof(InputT));
-            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method));
+            var returnT = ScriptType.ToEnum(typeof(ReturnT));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, returnT));
         }
 
         public void TypeFunction<InputT, T1, ReturnT>(string methodName, Func<InputT, T1, ReturnT> method)
         {
             var inputT = ScriptType.ToEnum(typeof(InputT));
             var t1 = ScriptType.ToEnum(typeof(T1));
+            var returnT = ScriptType.ToEnum(typeof(ReturnT));
             ScriptTypes[] args = { t1 };
-            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args, returnT));
         }
 
         public void TypeFunction<InputT, T1, T2, ReturnT>(string methodName, Func<InputT, T1, T2, ReturnT> method)
@@ -1090,8 +1281,32 @@ namespace Script
             var inputT = ScriptType.ToEnum(typeof(InputT));
             var t1 = ScriptType.ToEnum(typeof(T1));
             var t2 = ScriptType.ToEnum(typeof(T2));
+            var returnT = ScriptType.ToEnum(typeof(ReturnT));
             ScriptTypes[] args = { t1, t2 };
-            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args));
+            TypeFunctions.Add(new ScriptTypeFunction(inputT, methodName, method, args, returnT));
+        }
+
+        private List<ScriptTypeCondition> TypeConditions = new List<ScriptTypeCondition>();
+        public void TypeCondition<InputT>(string methodName, Func<InputT> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            TypeConditions.Add(new ScriptTypeCondition(inputT, methodName, method));
+        }
+
+        public void TypeCondition<InputT, T1, T2>(string methodName, Func<InputT, T1> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            var t1 = ScriptType.ToEnum(typeof(T1));
+            ScriptTypes[] args = { t1 };
+            TypeConditions.Add(new ScriptTypeCondition(inputT, methodName, method, args));
+        }
+        public void TypeCondition<InputT, T1, T2>(string methodName, Func<InputT, T1, T2> method)
+        {
+            var inputT = ScriptType.ToEnum(typeof(InputT));
+            var t1 = ScriptType.ToEnum(typeof(T1));
+            var t2 = ScriptType.ToEnum(typeof(T2));
+            ScriptTypes[] args = { t1, t2 };
+            TypeConditions.Add(new ScriptTypeCondition(inputT, methodName, method, args));
         }
 
         private List<ScriptTypeProperty> TypeProperties = new List<ScriptTypeProperty>();

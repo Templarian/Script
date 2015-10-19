@@ -16,6 +16,9 @@ namespace Script
         ListDouble,
         ListString,
         ListBoolean,
-        Null
+        Regex,
+        Null,
+        Undefined,
+        Void
     }
 }

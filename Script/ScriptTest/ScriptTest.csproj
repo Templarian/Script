@@ -59,6 +59,7 @@
     <Compile Include="ArithmeticInteger.cs" />
     <Compile Include="Extend.cs" />
     <Compile Include="Function.cs" />
+    <Compile Include="RegexBasic.cs" />
     <Compile Include="Trigger.cs" />
     <Compile Include="ExecuteOverload.cs" />
     <Compile Include="Evaluate.cs" />

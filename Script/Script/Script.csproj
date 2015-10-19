@@ -41,7 +41,11 @@
     <Compile Include="ScriptCondition.cs" />
     <Compile Include="ScriptEngine.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ScriptError.cs" />
+    <Compile Include="ScriptAction.cs" />
+    <Compile Include="ScriptException.cs" />
+    <Compile Include="ScriptMethod.cs" />
+    <Compile Include="ScriptTypeCondition.cs" />
+    <Compile Include="ScriptTypeMethod.cs" />
     <Compile Include="ScriptTypeProperty.cs" />
     <Compile Include="ScriptTypeFunction.cs" />
     <Compile Include="ScriptFunction.cs" />
@@ -49,6 +53,7 @@
     <Compile Include="ScriptScope.cs" />
     <Compile Include="ScriptType.cs" />
     <Compile Include="ScriptTypes.cs" />
+    <Compile Include="ScriptVariable.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

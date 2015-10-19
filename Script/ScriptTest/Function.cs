@@ -21,6 +21,21 @@ namespace ScriptTest
         }
 
         [TestMethod]
+        public void FunctionInvalidArguments()
+        {
+            var script = new ScriptEngine();
+            script.AddAction<string>("log", message =>
+            {
+                Assert.Fail();
+            });
+            script.Exception(e =>
+            {
+                Assert.AreEqual("Unexpected string on Line 1 Col 14", e.Message);
+            });
+            script.Execute("log('Missing' 'Comma!')");
+        }
+
+        [TestMethod]
         public void FunctionVariableString()
         {
             var script = new ScriptEngine();
@@ -30,7 +45,7 @@ namespace ScriptTest
             });
             var code = new StringBuilder();
             code.AppendLine("string foo = 'Hello'");
-            code.AppendLine("return appendWorld(foo)"); // Should run log, pass { indent: 1 }
+            code.AppendLine("appendWorld(foo)"); // Should run log, pass { indent: 1 }
             Assert.AreEqual("Hello World!", script.Evaluate<string>(code.ToString()));
         }
     }

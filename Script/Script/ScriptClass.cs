@@ -8,7 +8,7 @@ namespace Script
 {
     public class ScriptClass
     {
-        internal Action<ScriptError> Error;
+        internal Action<ScriptException> Error;
 
         public string Name { get; set; }
         public Delegate Function { get; set; }
@@ -23,20 +23,16 @@ namespace Script
             Name = name;
         }
 
-        internal List<ScriptProperty> Property = new List<ScriptProperty>();
+        internal List<ScriptVariable> Variables = new List<ScriptVariable>();
 
-        public void SetProperty<T>(string name, object value)
+        public void SetVariable<T>(string name, ScriptVariable value)
         {
             ScriptTypes type = ScriptType.ToEnum(typeof(T));
-            var property = Property.FirstOrDefault(p => p.Name == name);
+            var property = Variables.FirstOrDefault(p => p.Name == name);
             if (property == null)
             {
-                Property.Add(new ScriptProperty
-                {
-                    Name = name,
-                    Type = type,
-                    Value = value
-                });
+                value.Name = name;
+                Variables.Add(value);
             }
             else
             {
@@ -46,23 +42,26 @@ namespace Script
                 }
                 else
                 {
-                    Error.DynamicInvoke(new ScriptError
-                    {
-                        Message = String.Format("'{0}' requires a data type of {1}", name, type),
-                        LineNumber = 0,
-                        Position = 0,
-                        MethodName = "undefined"
-                    });
+                    throw new ScriptException(
+                        message: String.Format("'{0}' requires a data type of {1}", name, type),
+                        row: 0,
+                        column: 0
+                    );
                 }
             }
         }
 
-        public void GetProperty(string name)
+        public ScriptVariable GetProperty(string name)
         {
-            Property.RemoveAll(property => property.Name == name);
+            return Variables.Where(v => v.Name == name).FirstOrDefault();
         }
 
-        internal List<ScriptFunction> Functions = new List<ScriptFunction>();
+        public void DeleteProperty(string name)
+        {
+            Variables.RemoveAll(property => property.Name == name);
+        }
+
+        internal List<ScriptMethod> Methods = new List<ScriptMethod>();
 
         /// <summary>
         /// Add a user defined function to the script engine.
@@ -72,22 +71,25 @@ namespace Script
         public void AddFunction<TResult>(string name, Func<TResult> function)
         {
             ScriptTypes[] args = { };
-            Functions.Add(new ScriptFunction(name, function, args));
+            var tr = ScriptType.ToEnum(typeof(TResult));
+            Methods.Add(new ScriptFunction(name, function, args, tr));
         }
 
         public void AddFunction<T1, TResult>(string name, Func<T1, TResult> function)
         {
             var t1 = ScriptType.ToEnum(typeof(T1));
+            var tr = ScriptType.ToEnum(typeof(TResult));
             ScriptTypes[] args = { t1 };
-            Functions.Add(new ScriptFunction(name, function, args));
+            Methods.Add(new ScriptFunction(name, function, args, tr));
         }
 
         public void AddFunction<T1, T2, TResult>(string name, Func<T1, T2, TResult> function)
         {
             var t1 = ScriptType.ToEnum(typeof(T1));
             var t2 = ScriptType.ToEnum(typeof(T2));
+            var tr = ScriptType.ToEnum(typeof(TResult));
             ScriptTypes[] args = { t1, t2 };
-            Functions.Add(new ScriptFunction(name, function, args));
+            Methods.Add(new ScriptFunction(name, function, args, tr));
         }
 
         /// <summary>
@@ -97,7 +99,7 @@ namespace Script
         /// <param name="action">Executed when action name is found and argument types match.</param>
         public void AddAction(string name, Action action)
         {
-            Functions.Add(new ScriptFunction(name, action));
+            Methods.Add(new ScriptFunction(name, action));
         }
 
 
@@ -105,7 +107,7 @@ namespace Script
         {
             var t1 = ScriptType.ToEnum(typeof(T1));
             ScriptTypes[] args = { t1 };
-            Functions.Add(new ScriptFunction(name, action, args));
+            Methods.Add(new ScriptFunction(name, action, args));
         }
 
 
@@ -114,7 +116,7 @@ namespace Script
             var t1 = ScriptType.ToEnum(typeof(T1));
             var t2 = ScriptType.ToEnum(typeof(T2));
             ScriptTypes[] args = { t1, t2 };
-            Functions.Add(new ScriptFunction(name, action, args));
+            Methods.Add(new ScriptFunction(name, action, args));
         }
 
 
@@ -124,11 +126,9 @@ namespace Script
             var t2 = ScriptType.ToEnum(typeof(T2));
             var t3 = ScriptType.ToEnum(typeof(T3));
             ScriptTypes[] args = { t1, t2, t3 };
-            Functions.Add(new ScriptFunction(name, action, args));
+            Methods.Add(new ScriptFunction(name, action, args));
         }
-
-        internal List<ScriptCondition> Conditions = new List<ScriptCondition>();
-
+        
         /// <summary>
         /// Add a user defined function to the script engine.
         /// </summary>
@@ -138,7 +138,7 @@ namespace Script
         {
             var t1 = ScriptType.ToEnum(typeof(T1));
             ScriptTypes[] args = { t1 };
-            Conditions.Add(new ScriptCondition(name, condition, args));
+            Methods.Add(new ScriptCondition(name, condition, args));
         }
 
         public void AddCondition<T1, T2>(string name, Func<T1, T2, bool> condition)
@@ -146,7 +146,7 @@ namespace Script
             var t1 = ScriptType.ToEnum(typeof(T1));
             var t2 = ScriptType.ToEnum(typeof(T2));
             ScriptTypes[] args = { t1, t2 };
-            Conditions.Add(new ScriptCondition(name, condition, args));
+            Methods.Add(new ScriptCondition(name, condition, args));
         }
 
         internal List<ScriptClass> Classes = new List<ScriptClass>();

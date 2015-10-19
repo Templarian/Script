@@ -11,8 +11,37 @@ namespace ScriptTest
     [TestClass]
     public class Condition
     {
+
         [TestMethod]
         public void ConditionBoolTrue()
+        {
+            var script = new ScriptEngine();
+            script.AddAction<string>("log", message =>
+            {
+                Assert.AreEqual("Hello World!", message);
+            });
+            var code = new StringBuilder();
+            code.AppendLine("if (true)"); // Basic if statment
+            code.AppendLine("    log('Hello World!')"); // Should run log, pass { indent: 1 }
+            script.Execute(code.ToString());
+        }
+
+        [TestMethod]
+        public void ConditionBoolFalse()
+        {
+            var script = new ScriptEngine();
+            script.AddAction<string>("log", message =>
+            {
+                Assert.Fail("This should never be called.");
+            });
+            var code = new StringBuilder();
+            code.AppendLine("if (false)"); // Basic if statment
+            code.AppendLine("    log('Hello World!')"); // Should run log, pass { indent: 1 }
+            script.Execute(code.ToString());
+        }
+        
+        [TestMethod]
+        public void ConditionFunctionBoolTrue()
         {
             var script = new ScriptEngine();
             script.AddCondition<string>("foo", message => {
@@ -29,7 +58,7 @@ namespace ScriptTest
         }
 
         [TestMethod]
-        public void ConditionBoolFalse()
+        public void ConditionFunctionBoolFalse()
         {
             var script = new ScriptEngine();
             script.AddCondition<string>("foo", message =>
@@ -119,7 +148,7 @@ namespace ScriptTest
             script.Execute(code.ToString());
         }
 
-        private void ExceptionHandler(ScriptError error)
+        private void ExceptionHandler(ScriptException error)
         {
             Assert.Fail();
         }
