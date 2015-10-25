@@ -18,10 +18,16 @@ Please view the [wiki](https://github.com/Templarian/Script/wiki) for a comprehe
 
 ## Hello World
 
-```text
-log('Hello World!')
-```
-
 ```csharp
-code...
+static void Main()
+{
+    var engine = new ScriptEngine();
+    engine.AddAction<string>("log", Log);
+    engine.Execute("log('Hello World!')");
+    Console.In.Read();
+}
+static void Log(string message)
+{
+    Console.WriteLine(message);
+}
 ```
