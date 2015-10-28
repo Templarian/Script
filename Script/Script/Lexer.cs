@@ -114,7 +114,12 @@ namespace Script
         }
 
         private Stack<History> Past = new Stack<History>();
+
         public bool Next()
+        {
+            return Next(false);
+        }
+        public bool Next(bool supressError)
         {
             Past.Push(new History(LineNumber, Position, lineRemaining));
 
@@ -150,7 +155,10 @@ namespace Script
                     return true;
                 }
             }
-            error.DynamicInvoke(LineNumber, Position, lineRemaining);
+            if (!supressError)
+            {
+                error.DynamicInvoke(LineNumber, Position, lineRemaining);
+            }
             return false;
         }
 
