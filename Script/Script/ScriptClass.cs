@@ -2,32 +2,34 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Script
 {
     public class ScriptClass
     {
-        internal Action<ScriptException> Error;
-
+        
         public string Name { get; set; }
         public Delegate Function { get; set; }
 
-        public ScriptClass ()
+        internal Action<ScriptException> Error;
+        internal List<ScriptVariable> Variables = new List<ScriptVariable>();
+        internal List<ScriptVariable> Properties = new List<ScriptVariable>();
+        internal List<ScriptMethod> Methods = new List<ScriptMethod>();
+
+        public ScriptClass()
         {
-            
+
         }
 
-        public ScriptClass (string name)
+        public ScriptClass(string name)
         {
             Name = name;
         }
-
-        internal List<ScriptVariable> Variables = new List<ScriptVariable>();
-
-        public void SetVariable<T>(string name, ScriptVariable value)
+        
+        public void SetVariable(string name, ScriptVariable value)
         {
-            ScriptTypes type = ScriptType.ToEnum(typeof(T));
             var property = Variables.FirstOrDefault(p => p.Name == name);
             if (property == null)
             {
@@ -36,14 +38,16 @@ namespace Script
             }
             else
             {
-                if (property.Type == type)
+                if (property.Type == value.Type)
                 {
                     property.Value = value;
                 }
                 else
                 {
                     throw new ScriptException(
-                        message: String.Format("'{0}' requires a data type of {1}", name, type),
+                        message: String.Format("'{0}' requires a data type of {1}",
+                            name,
+                            value.Type),
                         row: 0,
                         column: 0
                     );
@@ -61,7 +65,55 @@ namespace Script
             Variables.RemoveAll(property => property.Name == name);
         }
 
-        internal List<ScriptMethod> Methods = new List<ScriptMethod>();
+        public void AddProperty(string name, string value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.String));
+        }
+
+        public void AddProperty(string name, int value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Integer));
+        }
+
+        public void AddProperty(string name, double value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, bool value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, Regex value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, List<string> value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, List<int> value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, List<double> value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        public void AddProperty(string name, List<bool> value)
+        {
+            Properties.Add(new ScriptVariable(name, value, ScriptTypes.Double));
+        }
+
+        private void AddProperty(string name, object value)
+        {
+            Properties.Add(new ScriptVariable(name, value));
+        }
 
         /// <summary>
         /// Add a user defined function to the script engine.
@@ -128,7 +180,7 @@ namespace Script
             ScriptTypes[] args = { t1, t2, t3 };
             Methods.Add(new ScriptFunction(name, action, args));
         }
-        
+
         /// <summary>
         /// Add a user defined function to the script engine.
         /// </summary>

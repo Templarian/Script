@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Script
@@ -15,8 +16,52 @@ namespace Script
 
         public string Name { get; set; }
 
+        public ScriptVariable()
+        {
+            Value = null;
+            Type = ScriptTypes.Undefined;
+        }
+
+        public ScriptVariable(object value)
+        {
+            Value = value;
+            Type = value is string ? ScriptTypes.String
+                : value is int ? ScriptTypes.Integer
+                : value is double ? ScriptTypes.Double
+                : value is bool ? ScriptTypes.Boolean
+                : value is Regex ? ScriptTypes.Regex
+                : value is List<string> ? ScriptTypes.ListString
+                : value is List<int> ? ScriptTypes.ListInteger
+                : value is List<double> ? ScriptTypes.ListDouble
+                : value is List<bool> ? ScriptTypes.ListBoolean
+                : ScriptTypes.Null;
+        }
+
         public ScriptVariable(object value, ScriptTypes type)
         {
+            Value = value;
+            Type = type;
+        }
+
+        public ScriptVariable(string name, object value)
+        {
+            Name = name;
+            Value = value;
+            Type = value is string ? ScriptTypes.String
+                : value is int ? ScriptTypes.Integer
+                : value is double ? ScriptTypes.Double
+                : value is bool ? ScriptTypes.Boolean
+                : value is Regex ? ScriptTypes.Regex
+                : value is List<string> ? ScriptTypes.ListString
+                : value is List<int> ? ScriptTypes.ListInteger
+                : value is List<double> ? ScriptTypes.ListDouble
+                : value is List<bool> ? ScriptTypes.ListBoolean
+                : ScriptTypes.Null;
+        }
+
+        public ScriptVariable(string name, object value, ScriptTypes type)
+        {
+            Name = name;
             Value = value;
             Type = type;
         }

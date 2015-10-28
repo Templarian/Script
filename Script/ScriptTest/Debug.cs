@@ -105,7 +105,7 @@ namespace ScriptTest
         }
 
         [TestMethod]
-        public void DebugLogSetListAndRead()
+        public void ListStringAndRead()
         {
             var script = new ScriptEngine();
             script.Exception(e =>
@@ -117,6 +117,22 @@ namespace ScriptTest
             code.AppendLine("foo[0]");
             var value = script.Evaluate<string>(code.ToString());
             Assert.AreEqual(value, "Hello");
+        }
+
+        [TestMethod]
+        public void ListStringNestedAndRead()
+        {
+            // Nested arrays are not supported.
+            var script = new ScriptEngine();
+            script.Exception(e =>
+            {
+                Assert.AreEqual("Invalid data type 'ListString' in 'String' list near Line 1 Col 36", e.Message);
+            });
+            var code = new StringBuilder();
+            code.AppendLine("string[] foo = [['Hello', 'Again'], 'World!']");
+            code.AppendLine("foo[0][0]");
+            var value = script.Evaluate<string>(code.ToString());
+            Assert.AreNotEqual(value, "Hello");
         }
 
     }

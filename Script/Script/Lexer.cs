@@ -39,12 +39,23 @@ namespace Script
         }
     }
 
+    public sealed class TokenDefinitionGroup
+    {
+        public TokenDefinitionGroup (string name, TokenDefinition[] tokenDefinitions)
+        {
+            this.Name = name;
+            this.TokenDefinitions = tokenDefinitions;
+        }
+        public readonly string Name;
+        public readonly TokenDefinition[] TokenDefinitions;
+    }
+
     public sealed class TokenDefinition
     {
-        public readonly IMatcher Matcher;
-        public readonly string Token;
+        public IMatcher Matcher;
+        public readonly Tokens Token;
 
-        public TokenDefinition(string regex, string token)
+        public TokenDefinition(string regex, Tokens token)
         {
             this.Matcher = new RegexMatcher(regex);
             this.Token = token;
@@ -67,16 +78,18 @@ namespace Script
     public class Lexer : IDisposable
     {
         private readonly TextReader reader;
-        private readonly TokenDefinition[] tokenDefinitions;
+        private readonly List<TokenDefinitionGroup> tokenDefinitionGroups;
+        private string groupName;
 
         private string lineRemaining;
         private Action<int, int, string> error;
 
-        public Lexer(TextReader reader, TokenDefinition[] tokenDefinitions, Action<int, int, string> error)
+        public Lexer(TextReader reader, List<TokenDefinitionGroup> tokenDefinitionGroups, Action<int, int, string> error)
         {
             this.reader = reader;
-            this.tokenDefinitions = tokenDefinitions;
+            this.tokenDefinitionGroups = tokenDefinitionGroups;
             this.error = error;
+            this.groupName = tokenDefinitionGroups.First().Name;
             nextLine();
         }
 
@@ -95,6 +108,11 @@ namespace Script
             nextLine();
         }
 
+        public void Step(string groupName)
+        {
+            this.groupName = groupName;
+        }
+
         private Stack<History> Past = new Stack<History>();
         public bool Next()
         {
@@ -111,12 +129,12 @@ namespace Script
 
             if (Position == -1)
             {
-                Token = "BLOCK";
+                Token = Tokens.Block;
                 Position = 0;
                 return true;
             }
 
-            foreach (var def in tokenDefinitions)
+            foreach (var def in tokenDefinitionGroups.First(x => x.Name == this.groupName).TokenDefinitions)
             {
                 var matched = def.Matcher.Match(lineRemaining);
                 if (matched > 0)
@@ -147,7 +165,7 @@ namespace Script
 
         public string TokenContents { get; private set; }
 
-        public string Token { get; private set; }
+        public Tokens Token { get; private set; }
 
         public int LineNumber { get; private set; }
 

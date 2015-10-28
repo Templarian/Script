@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Script
@@ -10,31 +11,30 @@ namespace Script
     {
         public static ScriptTypes ToEnum(Type o)
         {
-            var name = o.ToString();
-            switch (name)
-            {
-                case "System.Int32":
-                    return ScriptTypes.Integer;
-                case "System.Double":
-                    return ScriptTypes.Double;
-                case "System.String":
-                    return ScriptTypes.String;
-                case "System.Boolean":
-                    return ScriptTypes.Boolean;
-                case "System.Collections.Generic.List`1[System.Int32]":
-                    return ScriptTypes.ListInteger;
-                case "System.Collections.Generic.List`1[System.Double]":
-                    return ScriptTypes.ListDouble;
-                case "System.Collections.Generic.List`1[System.String]":
-                    return ScriptTypes.ListString;
-                case "System.Collections.Generic.List`1[System.Boolean]":
-                    return ScriptTypes.ListBoolean;
-                case "System.Text.RegularExpressions.Regex":
-                    return ScriptTypes.Regex;
-                case "System.Object":
-                    return ScriptTypes.Void;
-            }
-            return ScriptTypes.Null;
+            return o == typeof(string) ? ScriptTypes.String
+                : o == typeof(int) ? ScriptTypes.Integer
+                : o == typeof(double) ? ScriptTypes.Double
+                : o == typeof(bool) ? ScriptTypes.Boolean
+                : o == typeof(Regex) ? ScriptTypes.Regex
+                : o == typeof(List<string>) ? ScriptTypes.ListString
+                : o == typeof(List<int>) ? ScriptTypes.ListInteger
+                : o == typeof(List<double>) ? ScriptTypes.ListDouble
+                : o == typeof(List<bool>) ? ScriptTypes.ListBoolean
+                : ScriptTypes.Any;
         }
+
+        public static bool IsList(ScriptTypes type)
+        {
+            switch(type)
+            {
+                case ScriptTypes.ListString:
+                case ScriptTypes.ListInteger:
+                case ScriptTypes.ListDouble:
+                case ScriptTypes.ListBoolean:
+                    return true;
+            }
+            return false;
+        }
+        
     }
 }

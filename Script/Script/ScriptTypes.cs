@@ -8,6 +8,7 @@ namespace Script
 {
     public enum ScriptTypes
     {
+        Any,
         Integer,
         Double,
         String,
