@@ -104,7 +104,8 @@ namespace Script
                 if (lexer.Token == Tokens.Block)
                 {
                     lexer.Next();
-                    this.indentOffset = -1;
+                    //this.indentOffset = -1;
+                    Depths[0] = true;
                     if (lexer.Token == Tokens.EventName)
                     {
                         Step(lexer, this);
